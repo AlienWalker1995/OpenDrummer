@@ -1,0 +1,19 @@
+# Build output
+/build/
+/out/
+*.obj
+*.pdb
+
+# Recorded kits: third-party, ~3.5 GB. Fetch with fetch-kits.ps1.
+/Kits/
+
+# Offline renders from --render-kits / --render-sampled
+/Renders/
+
+# Editor and OS clutter
+.vs/
+.vscode/
+.idea/
+*.user
+Thumbs.db
+.DS_Store
