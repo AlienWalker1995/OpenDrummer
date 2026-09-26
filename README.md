@@ -55,8 +55,10 @@ generated file`.
 ### Low-latency ASIO (optional)
 
 Without ASIO, audio goes through WASAPI, which works but adds latency you can
-feel when drumming. The Steinberg ASIO SDK can't be redistributed, so download
-it from [Steinberg](https://www.steinberg.net/developers/) and build with:
+feel when drumming. Since October 2025 the Steinberg ASIO SDK is dual licensed,
+GPLv3 or proprietary, so it is compatible with this project - but it isn't
+included here. Download it from
+[Steinberg](https://www.steinberg.net/developers/) and build with:
 
 ```bat
 set ASIO_SDK_DIR=C:\path\to\asiosdk
@@ -70,6 +72,15 @@ repository. Download them into `Kits\` with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File fetch-kits.ps1
+```
+
+Kits load faster from an SSD. Each kit is several thousand small sample files,
+so the first load of a kit from a hard disk can take minutes, where an SSD takes
+seconds. To keep the kits on another drive, move the `Kits` folder there and add
+its path to `%APPDATA%\OpenDrummer\OpenDrummer.settings`:
+
+```xml
+<VALUE name="kitsFolder" val="D:\OpenDrummerKits"/>
 ```
 
 | Kit | Style | Licence |
@@ -105,9 +116,13 @@ The MIDI line in the dialog box says which kind of problem it is:
   monitor shows the note numbers.
 - **No MIDI input** — no input is selected. Open SETUP and tick your module.
 
+While a kit loads, the header counts the seconds. The first load after starting
+Windows reads every sample off the disk, so it is much slower than later ones -
+on a hard disk, minutes. See `kitsFolder` above for moving the kits to an SSD.
+
 Logs are written to `%APPDATA%\OpenDrummer\`: `devices.log` (audio and MIDI
 devices found at launch), `midi.log` (MIDI inputs opened, and any that failed),
-and `kits.log` (kit load times and failures).
+and `kits.log` (which kits folder was used, kit load times and failures).
 
 ### Offline rendering
 

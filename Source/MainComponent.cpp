@@ -769,7 +769,25 @@ void MainComponent::handleAsyncUpdate()
 void MainComponent::populateKitSelector()
 {
     kitSelector.clear (juce::dontSendNotification);
-    installedKits = sampledkits::findInstalledKits (sampledkits::getDefaultKitsFolder());
+
+    // A kits folder set in the settings wins, so the kits can be moved to a
+    // faster drive without moving the app.
+    juce::File kitsFolder;
+
+    if (auto* props = appProperties.getUserSettings())
+    {
+        const auto saved = props->getValue ("kitsFolder");
+
+        if (saved.isNotEmpty() && juce::File (saved).isDirectory())
+            kitsFolder = juce::File (saved);
+    }
+
+    if (! kitsFolder.isDirectory())
+        kitsFolder = sampledkits::getDefaultKitsFolder();
+
+    installedKits = sampledkits::findInstalledKits (kitsFolder);
+    appendKitLog ("kits folder: " + kitsFolder.getFullPathName()
+                  + "  (" + juce::String ((int) installedKits.size()) + " kits)");
 
     if (! installedKits.empty())
     {
@@ -837,36 +855,44 @@ void MainComponent::selectKitFromCombo (int comboId)
         kitCreditLabel.setText (kit.definition->credit, juce::dontSendNotification);
 
         const auto started = juce::Time::getMillisecondCounterHiRes();
+        kitLoadStartMs = started;
         juce::Component::SafePointer<MainComponent> safe (this);
 
-        sampledPlayer.loadAsync (kit, [safe, started, name] (bool ok, const juce::String& message)
+        appendKitLog (name + "  requested");
+
+        sampledPlayer.loadAsync (kit, [safe, started, name] (SampledKitPlayer::LoadResult result,
+                                                            const juce::String& message)
         {
             if (safe == nullptr)
                 return;
 
             const double seconds = (juce::Time::getMillisecondCounterHiRes() - started) / 1000.0;
 
-            if (ok)
+            switch (result)
             {
-                // Only now does audio move over, so the previous kit keeps
-                // playing right up until the new one is ready.
-                safe->useSampled.store (true);
-                safe->kitNotice = name + " ready in " + juce::String (seconds, 1) + " s";
-            }
-            else
-            {
-                safe->kitNotice = name + " failed to load: " + message;
+                case SampledKitPlayer::LoadResult::Loaded:
+                    // Only now does audio move over, so the previous kit keeps
+                    // playing right up until the new one is ready.
+                    safe->useSampled.store (true);
+                    safe->kitNotice = name + " ready in " + juce::String (seconds, 1) + " s";
+                    safe->kitNoticeUntil = juce::Time::getMillisecondCounter() + 4000u;
+                    break;
+
+                case SampledKitPlayer::LoadResult::Failed:
+                    safe->kitNotice = name + " failed to load: " + message;
+                    safe->kitNoticeUntil = juce::Time::getMillisecondCounter() + 15000u;
+                    break;
+
+                case SampledKitPlayer::LoadResult::Skipped:
+                    // Nothing was installed. The retry in the timer picks this
+                    // up if no later request lands a kit.
+                    break;
             }
 
-            safe->kitNoticeUntil = juce::Time::getMillisecondCounter() + (ok ? 4000u : 15000u);
-
-            // Kept on disk: a kit that fails to load once, on someone else's
-            // machine, is otherwise impossible to diagnose afterwards.
-            juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                .getChildFile ("OpenDrummer").getChildFile ("kits.log")
-                .appendText (juce::Time::getCurrentTime().toString (true, true) + "  " + name
-                             + (ok ? "  loaded in " : "  FAILED after ") + juce::String (seconds, 1)
-                             + " s  (" + message + ")" + juce::newLine);
+            safe->appendKitLog (name + (result == SampledKitPlayer::LoadResult::Loaded ? "  loaded in "
+                                      : result == SampledKitPlayer::LoadResult::Failed ? "  FAILED after "
+                                                                                       : "  skipped after ")
+                               + juce::String (seconds, 1) + " s  (" + message + ")");
         });
     }
     else
@@ -1038,6 +1064,15 @@ void MainComponent::refreshDeckSnapshot()
     s.kitCredit = kitCreditLabel.getText();
     s.kitLoading = sampledPlayer.isLoading();
 
+    // How long this load has been going. Kits live on whatever drive they were
+    // put on, and the first load from a spinning disk means thousands of small
+    // file reads - without a number on screen that is indistinguishable from a
+    // hang.
+    s.kitLoadSeconds = s.kitLoading && kitLoadStartMs > 0.0
+                     ? (float) ((juce::Time::getMillisecondCounterHiRes() - kitLoadStartMs) / 1000.0)
+                     : 0.0f;
+    s.kitLoaded = synthSelected.load() ? kitReady.load() : sampledPlayer.isLoaded();
+
     // A short status line: the full device name will not fit 34 characters.
     s.hiHatOpenness = sampled ? sampledPlayer.getOpenness() : engine.getMapping().getOpenness();
     const int voices = sampled ? sampledPlayer.getActiveVoiceCount() : engine.getActiveVoiceCount();
@@ -1144,6 +1179,32 @@ void MainComponent::timerCallback()
     }
 }
 
+void MainComponent::appendKitLog (const juce::String& line)
+{
+    juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+        .getChildFile ("OpenDrummer").getChildFile ("kits.log")
+        .appendText (juce::Time::getCurrentTime().toString (true, true) + "  " + line + juce::newLine);
+}
+
+void MainComponent::ensureKitLoaded()
+{
+    // A recorded kit is selected, nothing is loading, and nothing is loaded:
+    // the app would sit silent while naming a kit it never installed. That can
+    // happen when a load is superseded and the request that replaced it is too.
+    if (synthSelected.load() || useSampled.load() || sampledPlayer.isLoading())
+    {
+        kitRetryTicks = 0;
+        return;
+    }
+
+    if (++kitRetryTicks < 2)     // one grace tick, so a normal load is not cut short
+        return;
+
+    kitRetryTicks = 0;
+    appendKitLog ("no kit loaded - retrying " + loadingKitName);
+    selectKitFromCombo (kitSelector.getSelectedId());
+}
+
 void MainComponent::appendMidiLog (const juce::String& line)
 {
     juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
@@ -1208,6 +1269,7 @@ void MainComponent::refreshMidiStatus()
         midiRecheckCountdown = 30;
 
         ensureMidiInputs();
+        ensureKitLoaded();
 
         juce::StringArray enabled;
 

@@ -36,6 +36,8 @@ OpenDrummer shows each kit's credit on screen while that kit is loaded.
 
 ## Not included, and never downloaded
 
-**Steinberg ASIO SDK.** Its licence does not permit redistribution. To build
-with ASIO support, download it from Steinberg and set `ASIO_SDK_DIR`.
-ASIO is a trademark and software of Steinberg Media Technologies GmbH.
+**Steinberg ASIO SDK.** Dual licensed since October 2025, GPLv3 or proprietary.
+It is not bundled here: to build with ASIO support, download it from Steinberg
+and set `ASIO_SDK_DIR`. Using the ASIO name or logo is optional under the GPLv3
+terms and subject to Steinberg's trademark rules. ASIO is a trademark and
+software of Steinberg Media Technologies GmbH.

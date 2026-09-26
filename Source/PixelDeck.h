@@ -30,6 +30,8 @@ public:
         int kitIndex = 0;
         juce::String kitCredit;
         bool kitLoading = false;
+        bool kitLoaded = false;
+        float kitLoadSeconds = 0.0f;
 
         juce::String statusLine;     // "ASIO 48K 2.7MS  VOX 3  HAT 20%"
         float hiHatOpenness = 0.0f;

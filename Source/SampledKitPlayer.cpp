@@ -122,19 +122,26 @@ void SampledKitPlayer::loadAsync (const sampledkits::InstalledKit& kit, LoadCall
 
     loader.addJob ([this, kit, onDone, generation]
     {
+        const auto report = [onDone] (LoadResult result, juce::String message)
+        {
+            if (onDone)
+                juce::MessageManager::callAsync ([onDone, result, message] { onDone (result, message); });
+        };
+
         // Loads queue on one worker. If a newer kit was picked while this job
         // waited, skip it outright - otherwise clicking through kits makes the
         // one you wanted wait behind every kit you passed on the way.
         if (generation != loadGeneration.load())
         {
             pendingLoads.fetch_sub (1);
+            report (LoadResult::Skipped, "superseded before loading");
             return;
         }
 
         std::unique_ptr<sfz::Sfizz> fresh;
         juce::String message;
 
-        bool ok = buildInstance (kit, fresh, message, false);
+        const bool ok = buildInstance (kit, fresh, message, false);
 
         // A newer request arrived while this one was loading: discard this
         // result rather than flashing an old kit in for a moment.
@@ -146,8 +153,11 @@ void SampledKitPlayer::loadAsync (const sampledkits::InstalledKit& kit, LoadCall
         fresh.reset();   // old or discarded instance, destroyed off the audio thread
         pendingLoads.fetch_sub (1);
 
-        if (! superseded && onDone)
-            juce::MessageManager::callAsync ([onDone, ok, message] { onDone (ok, message); });
+        // Every outcome is reported, including the skipped ones. A silent
+        // return here is what let the app sit with no kit loaded and no sign
+        // of it.
+        report (superseded ? LoadResult::Skipped : ok ? LoadResult::Loaded : LoadResult::Failed,
+                superseded ? "superseded while loading" : message);
     });
 }
 

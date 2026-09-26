@@ -35,7 +35,12 @@ public:
     //==============================================================================
     void prepare (double sampleRate, int blockSize);
 
-    using LoadCallback = std::function<void (bool success, const juce::String& message)>;
+    /** How a load ended. Skipped means a newer kit was picked before this one
+        ran, so nothing was installed - the caller has to know that, or the app
+        can end up with no kit loaded and nothing said about it. */
+    enum class LoadResult { Loaded, Failed, Skipped };
+
+    using LoadCallback = std::function<void (LoadResult result, const juce::String& message)>;
 
     /** Loads on a worker thread; `onDone` is called on the message thread. A
         newer request supersedes an older one still in flight. */

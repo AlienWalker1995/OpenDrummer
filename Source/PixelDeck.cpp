@@ -274,14 +274,29 @@ void PixelDeck::drawHeader()
     drawButton (kitNext, ">", Target::KitNext);
 
     juce::String name;
+    std::uint8_t ink = White;
 
     if (snapshot.kitLoading)
-        name = "LOADING" + juce::String::repeatedString (".", (frameCount / 8) % 4);
+    {
+        name = "LOADING " + juce::String (juce::roundToInt (snapshot.kitLoadSeconds)) + "S"
+             + juce::String::repeatedString (".", (frameCount / 8) % 4);
+        ink = Orange;
+    }
     else if (juce::isPositiveAndBelow (snapshot.kitIndex, snapshot.kitNames.size()))
+    {
         name = snapshot.kitNames[snapshot.kitIndex];
 
-    name = fit (name.toUpperCase(), 140);
-    canvas.text (385 - Canvas::textWidth (name) / 2, 21, name, snapshot.kitLoading ? Orange : White);
+        // Naming a kit that is not loaded would present silence as if it were
+        // working, so say so instead.
+        if (! snapshot.kitLoaded)
+        {
+            name = "NO KIT: " + name;
+            ink = Red;
+        }
+    }
+
+    name = fit (name.toUpperCase(), 180);
+    canvas.text (385 - Canvas::textWidth (name) / 2, 21, name, ink);
 }
 
 //==============================================================================

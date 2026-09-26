@@ -104,6 +104,11 @@ private:
         closed, and reopens one that disappeared and came back. */
     void ensureMidiInputs();
     void appendMidiLog (const juce::String& line);
+    void appendKitLog (const juce::String& line);
+
+    /** Reloads the selected kit if the app somehow ended up with none. */
+    void ensureKitLoaded();
+    int kitRetryTicks = 0;
 
     juce::String describeAudioDevice() const;
 
@@ -155,6 +160,7 @@ private:
     juce::String kitNotice;         // "Big Rusty ready in 3.2 s", shown briefly
     juce::uint32 kitNoticeUntil = 0;
     juce::String loadingKitName;
+    double kitLoadStartMs = 0.0;
     juce::Label      hitLabel;
     LevelMeter       meter;
     juce::Slider     gainSlider;
